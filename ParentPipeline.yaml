@@ -1,0 +1,96 @@
+trigger: none
+pr: none
+
+stages:
+# Example of Existing Stage and Job
+# - stage: DEPLOY_TO_Test
+#   pool:
+#     vmImage: 'ubuntu-latest'
+#   jobs:
+#   - template: "azure-pipelines-var.yml"
+#     parameters:
+#           subscriptionId: "44be4120-4a66-4705-892e-76a113ca0cc1" 
+#           resourceGroupName: "adf_carlsberg"
+#           location: "Sweden Central"
+#           dataFactoryNameDev: "adfcarlsberg"
+#           dataFactoryNameTest: "adfcarlsbergtest"
+#           serviceConnectionName: "ME-MngEnvMCAP938500-jeffreylai-1"
+
+
+#Example1) Disable Particular Trigger on ADF      
+# - stage: DisableTrigger
+#   jobs:
+#   - job: BuildAndDeploy
+#     displayName: Stop Triggers on ADF Test
+#     steps:
+#     - task: AzurePowerShell@5
+#       inputs:
+#         azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+#         ScriptType: 'InlineScript'
+#         Inline: |
+#           Install-Module -Name Az.DataFactory -Force -AllowClobber
+                            
+#           Import-Module Az.DataFactory
+                            
+#           #Get-Command -Name Start-AzDataFactoryV2Trigger
+
+#           # Variables
+#           $resourceGroupName = "adf_carlsberg"
+#           $dataFactoryName = "adfcarlsbergtest"
+#           $triggerName = "trigger1"
+
+#           Stop-AzDataFactoryV2Trigger `
+#           -ResourceGroupName $resourceGroupName `
+#           -DataFactoryName $dataFactoryName `
+#           -Name $triggerName `
+#           -Force
+#         azurePowerShellVersion: 'LatestVersion'
+
+
+#Example2) Enable Particular Trigger on ADF      
+# - stage: EnableTrigger
+#   jobs:
+#   - job: BuildAndDeploy
+#     displayName: Enable Trigger ADF TEST
+#     steps:
+#     - task: AzurePowerShell@5
+#       inputs:
+#         azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+#         ScriptType: 'InlineScript'
+#         Inline: |
+#           Install-Module -Name Az.DataFactory -Force -AllowClobber
+                            
+#           Import-Module Az.DataFactory
+                            
+#           #Get-Command -Name Start-AzDataFactoryV2Trigger
+
+#           # Variables
+#           # $resourceGroupName = "adf_carlsberg"
+#           # $dataFactoryName = "adfcarlsbergtest"
+#           # $triggerName = "trigger1"
+                
+#           # Start-AzDataFactoryV2Trigger `
+#           # -ResourceGroupName $resourceGroupName `
+#           # -DataFactoryName $dataFactoryName `
+#           # -Name $triggerName `
+#           # -Force
+#         azurePowerShellVersion: 'LatestVersion'
+
+
+#Example3) Enable All Triggers on ADF Test
+- stage: EnableAllTrigger
+  jobs:
+  - job: BuildAndDeploy
+    displayName: Enable All triggers
+    steps:
+    - task: AzurePowerShell@5
+      displayName: 'Enable All Triggers'
+      inputs:
+        azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+        ScriptType: 'FilePath'
+        ScriptPath: '$(Build.Repository.LocalPath)/build/Start-AllAdfTriggers.ps1'
+        ScriptArguments: >
+          -ResourceGroupName "adf_carlsberg"
+          -DataFactoryName "adfcarlsbergtest"
+        azurePowerShellVersion: 'LatestVersion'
+
