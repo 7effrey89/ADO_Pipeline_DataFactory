@@ -1,0 +1,326 @@
+# Sample YAML file to validate and export an ARM template into a build artifact
+# Requires a package.json file located in the target repository
+
+parameters:
+- name: overrideParameters
+  type: string
+  default: ''
+
+- name: serviceConnectionName
+  type: string
+
+- name: subscriptionId
+  type: string
+
+- name: location
+  type: string
+
+- name: resourceGroupName
+  type: string
+
+- name: dataFactoryNameDev
+  type: string
+
+- name: dataFactoryNameTest
+  type: string
+
+
+jobs:
+- job: BuildAndDeploy
+  displayName: Build, Validate and Deploy ADF
+  steps:
+
+# Installs Node and the npm packages saved in your package.json file in the build
+
+  - task: UseNode@1
+    inputs:
+      version: '18.x'
+    displayName: 'Install Node.js'
+
+  - task: Npm@1
+    inputs:
+      command: 'install'
+      workingDir: '$(Build.Repository.LocalPath)/build' #replace with the package.json folder
+      verbose: true
+    displayName: 'Install npm package'
+
+# Validates all of the Data Factory resources in the repository. You'll get the same validation errors as when "Validate All" is selected.
+# Enter the appropriate subscription and name for the source factory. Either of the "Validate" or "Validate and Generate ARM template" options are required to perform validation. Running both is unnecessary.
+
+# ADF - Validates all on adf-code.
+  - task: Npm@1
+    inputs:
+      command: 'custom'
+      workingDir: '$(Build.Repository.LocalPath)/build' #replace with the package.json folder
+      customCommand: 'run build validate $(Build.Repository.LocalPath) /subscriptions/44be4120-4a66-4705-892e-76a113ca0cc1/resourceGroups/adf_xberg/providers/Microsoft.DataFactory/factories/adfxberg'
+    displayName: 'Validate'
+
+# Validate and then generate the ARM template into the destination folder, which is the same as selecting "Publish" from the UX.
+# The ARM template generated isn't published to the live version of the factory. Deployment should be done by using a CI/CD pipeline. 
+
+  # ADF - Generate ARM template
+  - task: Npm@1
+    inputs:
+      command: 'custom'
+      workingDir: '$(Build.Repository.LocalPath)/build' #replace with the package.json folder
+      customCommand: 'run build export $(Build.Repository.LocalPath) /subscriptions/44be4120-4a66-4705-892e-76a113ca0cc1/resourceGroups/adf_xberg/providers/Microsoft.DataFactory/factories/adfxberg "ArmTemplate"'
+    # For using preview that allows you to only stop/ start triggers that are modified, please comment out the above line and uncomment the below line. Make sure the package.json contains the build-preview command.
+    # customCommand: 'run build-preview export $(Build.Repository.LocalPath) /subscriptions/aaaa0a0a-bb1b-cc2c-dd3d-eeeeee4e4e4e/resourceGroups/GartnerMQ2021/providers/Microsoft.DataFactory/factories/Dev-GartnerMQ2021-DataFactory "ArmTemplate"'
+    displayName: 'Validate and Generate ARM template'
+
+# Publish the artifact to be used as a source for a release pipeline.
+# Publish the artifact
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: '$(Build.Repository.LocalPath)/build/ArmTemplate' #replace with the package.json folder
+      artifact: 'ArmTemplates'
+      publishLocation: 'pipeline'
+
+  - task: AzurePowerShell@5
+    displayName: 'Trigger Status ADF DEV'
+    inputs:
+      azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      ScriptType: 'InlineScript'
+      Inline: |
+        Install-Module -Name Az.DataFactory -Force -AllowClobber
+                          
+        Import-Module Az.DataFactory
+                          
+        $resourceGroupName = "adf_xberg"
+        $dataFactoryName = "adfxberg"
+        $triggerName = "trigger1"
+
+        # Get trigger status
+        $trigger = Get-AzDataFactoryV2Trigger `
+          -ResourceGroupName $resourceGroupName `
+          -DataFactoryName $dataFactoryName `
+          -Name $triggerName
+
+        # Display status
+        $trigger.Properties.RuntimeState
+      errorActionPreference: 'continue'
+      azurePowerShellVersion: 'LatestVersion'
+
+  - task: AzurePowerShell@5
+    displayName: 'Trigger Status ADF TEST'
+    inputs:
+      azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      ScriptType: 'InlineScript'
+      Inline: |
+        $resourceGroupName = "adf_xberg"
+        $dataFactoryName = "adfxbergtest"
+        $triggerName = "trigger1"
+
+        # Get trigger status
+        $trigger = Get-AzDataFactoryV2Trigger `
+          -ResourceGroupName $resourceGroupName `
+          -DataFactoryName $dataFactoryName `
+          -Name $triggerName
+
+        # Display status
+        $trigger.Properties.RuntimeState
+      errorActionPreference: 'continue'
+      azurePowerShellVersion: 'LatestVersion'
+
+# Official Powershell ADF Trigger script used to toggle disabled(stopped)/enable(started) status for trigger  
+#predeployment=true will set trigger to disabled.
+#is set to set all triggers at the target ADF (Test) to disabled
+# setting all triggers to Disabled ( Unncessary - for save precausions as if enabled and trying to set it to enable too - the pipeline will fail with error: "TriggerEnabledCannotUpdate: Cannot update enabled Trigger; the trigger needs to be disabled first."), and then setting Test ADF pipeline to Enabled…
+  - task: AzurePowerShell@5
+    displayName: 'Stop Triggers ADF TEST'
+    inputs:
+      azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      ScriptType: 'FilePath'
+      pwsh: true
+      ScriptPath: '$(Build.Repository.LocalPath)/build/PrePostDeploymentScript.Ver2.ps1'
+      ScriptArguments: >
+        -armTemplate "$(Build.Repository.LocalPath)/build/ArmTemplate/ARMTemplateForFactory.json"
+        -ResourceGroupName ${{ parameters.resourceGroupName }}
+        -DataFactoryName ${{ parameters.dataFactoryNameTest }}
+        -predeployment $true
+        -deleteDeployment $false
+      errorActionPreference: 'continue'
+      azurePowerShellVersion: 'LatestVersion'
+
+# - task: AzurePowerShell@5
+#   displayName: 'Stop Triggers ADF TEST'
+#   inputs:
+#     azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+#     ScriptType: 'FilePath'
+#     pwsh: true
+#     ScriptPath: '$(Build.Repository.LocalPath)/build/PrePostDeploymentScript.Ver2.ps1'
+#     ScriptArguments: >
+#       -armTemplate "$(Build.Repository.LocalPath)/build/ArmTemplate/ARMTemplateForFactory.json"
+#       -ResourceGroupName "adf_xberg"
+#       -DataFactoryName "adfxbergtest"
+#       -predeployment $true
+#       -deleteDeployment $false
+#     errorActionPreference: 'continue'
+#     azurePowerShellVersion: 'LatestVersion'
+
+# - task: AzurePowerShell@5
+#   displayName: 'Stop Triggers ADF DEV'
+#   inputs:
+#     azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+#     ScriptType: 'FilePath'
+#     pwsh: true
+#     ScriptPath: '$(Build.Repository.LocalPath)/build/PrePostDeploymentScript.Ver2.ps1'
+#     ScriptArguments: >
+#       -armTemplate "$(Build.Repository.LocalPath)/build/ArmTemplate/ARMTemplateForFactory.json"
+#       -ResourceGroupName ${{ parameters.resourceGroupName }}
+#       -DataFactoryName ${{ parameters.dataFactoryNameDev }}
+#       -predeployment $true
+#       -deleteDeployment $false
+#     errorActionPreference: 'continue'
+#     azurePowerShellVersion: 'LatestVersion'
+
+  # - task: AzurePowerShell@5
+  #   displayName: 'Start Triggers1 Dev'
+  #   inputs:
+  #     azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+  #     ScriptType: 'InlineScript'
+  #     Inline: |                
+  #       Get-Command -Name Start-AzDataFactoryV2Trigger
+              
+  #       # Variables
+  #       $resourceGroupName = "adf_xberg"
+  #       $dataFactoryName = "adfxberg"
+  #       $triggerName = "trigger1"
+              
+  #       Start-AzDataFactoryV2Trigger `
+  #       -ResourceGroupName $resourceGroupName `
+  #       -DataFactoryName $dataFactoryName `
+  #       -Name $triggerName `
+  #       -Force
+  #     errorActionPreference: 'continue'
+  #     azurePowerShellVersion: 'LatestVersion'
+
+# Deploying Dev ADF Arm template to Test ADF
+  - task: AzureResourceManagerTemplateDeployment@3
+    inputs:
+      deploymentScope: 'Resource Group'
+      azureResourceManagerConnection: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      subscriptionId: '44be4120-4a66-4705-892e-76a113ca0cc1'
+      action: 'Create Or Update Resource Group'
+      resourceGroupName: 'adf_xberg'
+      location: 'Sweden Central'
+      templateLocation: 'Linked artifact'
+      csmFile: '$(Build.Repository.LocalPath)/build/ArmTemplate/ARMTemplateForFactory.json'
+      csmParametersFile: '$(Build.Repository.LocalPath)/build/ArmTemplate/ARMTemplateParametersForFactory.json'
+      overrideParameters: '-factoryName adfxbergtest'
+      deploymentMode: 'Incremental'
+
+  - task: AzurePowerShell@5
+    displayName: 'Trigger Status ADF DEV'
+    inputs:
+      azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      ScriptType: 'InlineScript'
+      Inline: |           
+        $resourceGroupName = "adf_xberg"
+        $dataFactoryName = "adfxberg"
+        $triggerName = "trigger1"
+
+        # Get trigger status
+        $trigger = Get-AzDataFactoryV2Trigger `
+          -ResourceGroupName $resourceGroupName `
+          -DataFactoryName $dataFactoryName `
+          -Name $triggerName
+
+        # Display status
+        $trigger.Properties.RuntimeState
+      errorActionPreference: 'continue'
+      azurePowerShellVersion: 'LatestVersion'
+
+  - task: AzurePowerShell@5
+    displayName: 'Trigger Status ADF TEST'
+    inputs:
+      azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      ScriptType: 'InlineScript'
+      Inline: |
+        $resourceGroupName = "adf_xberg"
+        $dataFactoryName = "adfxbergtest"
+        $triggerName = "trigger1"
+
+        # Get trigger status
+        $trigger = Get-AzDataFactoryV2Trigger `
+          -ResourceGroupName $resourceGroupName `
+          -DataFactoryName $dataFactoryName `
+          -Name $triggerName
+
+        # Display status
+        $trigger.Properties.RuntimeState
+      errorActionPreference: 'continue'
+      azurePowerShellVersion: 'LatestVersion'
+
+  # - task: AzurePowerShell@5
+  #   displayName: "Stop Triggers"
+  #   inputs:
+  #     azureSubscription: "${{ parameters.serviceConnectionName }}"
+  #     ScriptPath: '$(Build.Repository.LocalPath)/build/PrePostDeploymentScript.Ver2.ps1'
+  #     ScriptArguments:
+  #       "-armTemplate $(Build.Repository.LocalPath)/build/ArmTemplate/ARMTemplateForFactory.json \
+  #       -ResourceGroupName ${{ parameters.resourceGroupName }} \
+  #       -DataFactoryName  ${{ parameters.dataFactoryNameTest }} \
+  #       -PreDeployment $true \
+  #       -DeleteDeployment $false"
+  #     azurePowerShellVersion: LatestVersion
+
+  # - task: AzurePowerShell@5
+  #   displayName: 'Trigger Status ADF TEST'
+  #   inputs:
+  #     azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+  #     ScriptType: 'InlineScript'
+  #     Inline: |
+  #       $resourceGroupName = "adf_xberg"
+  #       $dataFactoryName = "adfxbergtest"
+  #       $triggerName = "trigger1"
+
+  #       # Get trigger status
+  #       $trigger = Get-AzDataFactoryV2Trigger `
+  #         -ResourceGroupName $resourceGroupName `
+  #         -DataFactoryName $dataFactoryName `
+  #         -Name $triggerName
+
+  #       # Display status
+  #       $trigger.Properties.RuntimeState
+  #     errorActionPreference: 'continue'
+  #     azurePowerShellVersion: 'LatestVersion'
+
+# Official Powershell ADF Trigger script used to toggle disabled(stopped)/enable(started) status for trigger  
+#predeployment=false will set trigger to enabled.
+#is set to set all triggers at the target ADF (Test) to enabled
+  - task: AzurePowerShell@5
+    displayName: 'Start Triggers'
+    inputs:
+      azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      ScriptType: 'FilePath'
+      pwsh: true
+      ScriptPath: '$(Build.Repository.LocalPath)/build/PrePostDeploymentScript.Ver2.ps1'
+      ScriptArguments: >
+        -armTemplate "$(Build.Repository.LocalPath)/build/ArmTemplate/ARMTemplateForFactory.json"
+        -ResourceGroupName "adf_xberg"
+        -DataFactoryName "adfxbergtest"
+        -PreDeployment $false
+        -DeleteDeployment $true
+      azurePowerShellVersion: 'LatestVersion'
+
+  - task: AzurePowerShell@5
+    displayName: 'Trigger Status ADF TEST'
+    inputs:
+      azureSubscription: 'ME-MngEnvMCAP938500-jeffreylai-1'
+      ScriptType: 'InlineScript'
+      Inline: |
+        $resourceGroupName = "adf_xberg"
+        $dataFactoryName = "adfxbergtest"
+        $triggerName = "trigger1"
+
+        # Get trigger status
+        $trigger = Get-AzDataFactoryV2Trigger `
+          -ResourceGroupName $resourceGroupName `
+          -DataFactoryName $dataFactoryName `
+          -Name $triggerName
+
+        # Display status
+        $trigger.Properties.RuntimeState
+      errorActionPreference: 'continue'
+      azurePowerShellVersion: 'LatestVersion'

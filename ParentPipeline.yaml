@@ -10,10 +10,10 @@ stages:
 #   - template: "azure-pipelines-var.yml"
 #     parameters:
 #           subscriptionId: "44be4120-4a66-4705-892e-76a113ca0cc1" 
-#           resourceGroupName: "adf_carlsberg"
+#           resourceGroupName: "adf_xberg"
 #           location: "Sweden Central"
-#           dataFactoryNameDev: "adfcarlsberg"
-#           dataFactoryNameTest: "adfcarlsbergtest"
+#           dataFactoryNameDev: "adfxberg"
+#           dataFactoryNameTest: "adfxbergtest"
 #           serviceConnectionName: "ME-MngEnvMCAP938500-jeffreylai-1"
 
 
@@ -35,8 +35,8 @@ stages:
 #           #Get-Command -Name Start-AzDataFactoryV2Trigger
 
 #           # Variables
-#           $resourceGroupName = "adf_carlsberg"
-#           $dataFactoryName = "adfcarlsbergtest"
+#           $resourceGroupName = "adf_xberg"
+#           $dataFactoryName = "adfxbergtest"
 #           $triggerName = "trigger1"
 
 #           Stop-AzDataFactoryV2Trigger `
@@ -65,8 +65,8 @@ stages:
 #           #Get-Command -Name Start-AzDataFactoryV2Trigger
 
 #           # Variables
-#           # $resourceGroupName = "adf_carlsberg"
-#           # $dataFactoryName = "adfcarlsbergtest"
+#           # $resourceGroupName = "adf_xberg"
+#           # $dataFactoryName = "adfxbergtest"
 #           # $triggerName = "trigger1"
                 
 #           # Start-AzDataFactoryV2Trigger `
@@ -90,7 +90,7 @@ stages:
         ScriptType: 'FilePath'
         ScriptPath: '$(Build.Repository.LocalPath)/build/Start-AllAdfTriggers.ps1'
         ScriptArguments: >
-          -ResourceGroupName "adf_carlsberg"
-          -DataFactoryName "adfcarlsbergtest"
+          -ResourceGroupName "adf_xberg"
+          -DataFactoryName "adfxbergtest"
         azurePowerShellVersion: 'LatestVersion'
 
