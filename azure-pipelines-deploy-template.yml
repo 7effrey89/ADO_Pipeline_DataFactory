@@ -76,6 +76,7 @@ jobs:
       artifact: 'ArmTemplates'
       publishLocation: 'pipeline'
 
+# ADF Trigger Status
   - task: AzurePowerShell@5
     displayName: 'Trigger Status ADF DEV'
     inputs:
